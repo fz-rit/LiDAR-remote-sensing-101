@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Explorer: 3D Tree Reconstruction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chosen Palette: Earthy Harmony -->
+    <!-- Application Structure Plan: A single-page application with a fixed sidebar for thematic navigation (Overview, The Process, Method Comparison, Applications, Challenges & Future). This structure breaks the dense report into logical, user-driven modules, prioritizing exploration over linear reading. The core is the 'Method Comparison' dashboard, which allows users to interactively filter and visualize algorithm performance, directly addressing the key user task of evaluating different techniques. The user flow is designed to be non-linear, allowing immediate access to any section, which is more effective for a varied audience (researchers, students, planners) than a sequential report format. -->
+    <!-- Visualization & Content Choices: 
+        - The Process: Goal=Organize. Method=Interactive horizontal flowchart (HTML/CSS Flexbox). Interaction=Clicking a stage reveals details. Justification=Simplifies the complex reconstruction workflow into digestible steps.
+        - Method Comparison: Goal=Compare. Method=Dashboard with filter buttons, a dynamic bar chart (Chart.js), and a grid of informational cards. Interaction=Filters update both the chart and the visible cards. Justification=Transforms static table data into a powerful, user-driven comparison tool.
+        - Applications: Goal=Inform. Method=Grid of cards with icons. Interaction=Clicking a card opens a modal with details. Justification=Visually engaging way to present real-world use cases.
+        - Challenges: Goal=Inform. Method=Accordion UI. Interaction=Click to expand. Justification=Presents dense information concisely.
+        - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+        .nav-link {
+            transition: all 0.2s ease-in-out;
+        }
+        .nav-link.active {
+            background-color: #4A5568;
+            color: #F7FAFC;
+            font-weight: 700;
+        }
+        .content-section {
+            display: none;
+        }
+        .content-section.active {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+            animation: fadeIn 0.3s;
+        }
+        .modal-content {
+            animation: slideIn 0.3s;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 400px;
+            max-height: 50vh;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="flex flex-col md:flex-row min-h-screen">
+        <!-- Sidebar Navigation -->
+        <nav class="w-full md:w-64 bg-gray-800 text-white p-4 md:p-6 shadow-lg flex-shrink-0">
+            <h1 class="text-2xl font-bold mb-8 text-center border-b border-gray-600 pb-4">3D Tree Explorer</h1>
+            <ul class="space-y-2">
+                <li><a href="#overview" class="nav-link block p-3 rounded-lg hover:bg-gray-700">🚀 Overview</a></li>
+                <li><a href="#process" class="nav-link block p-3 rounded-lg hover:bg-gray-700">🔄 The Process</a></li>
+                <li><a href="#comparison" class="nav-link block p-3 rounded-lg hover:bg-gray-700">📊 Method Comparison</a></li>
+                <li><a href="#applications" class="nav-link block p-3 rounded-lg hover:bg-gray-700">🌍 Applications</a></li>
+                <li><a href="#challenges" class="nav-link block p-3 rounded-lg hover:bg-gray-700">🚧 Challenges & Future</a></li>
+            </ul>
+            <div class="mt-10 text-center text-xs text-gray-400">
+                <p>Interactive visualization of the "Review of Tree Reconstruction from 3D Point Clouds" report.</p>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main id="main-content" class="flex-1 p-4 sm:p-6 md:p-10">
+            <!-- Sections will be dynamically inserted here -->
+        </main>
+    </div>
+
+    <!-- Modal Container -->
+    <div id="modal-container" class="modal">
+        <div class="modal-content bg-white rounded-lg shadow-2xl m-auto p-8 max-w-2xl w-11/12 relative mt-20">
+            <button id="modal-close-btn" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-3xl font-bold">&times;</button>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            
+            const mainContent = document.getElementById('main-content');
+            const navLinks = document.querySelectorAll('.nav-link');
+            const modalContainer = document.getElementById('modal-container');
+            const modalBody = document.getElementById('modal-body');
+            const modalCloseBtn = document.getElementById('modal-close-btn');
+
+            let chartInstance = null;
+            
+            const data = {
+                overview: {
+                    title: 'Understanding 3D Tree Reconstruction',
+                    content: `
+                        <div class="bg-white p-8 rounded-xl shadow-md">
+                            <h2 class="text-3xl font-bold text-gray-900 mb-4">From Points to Forests: The Digital Revolution in Ecology</h2>
+                            <p class="text-lg text-gray-700 mb-6">This application provides an interactive journey into the world of 3D tree reconstruction. We translate a comprehensive technical report into an explorable format, detailing how scientists and planners turn vast, raw 3D point clouds into precise, actionable models of trees. This technology is fundamental for modern forestry, climate change research, and urban planning.</p>
+                            <p class="text-gray-600">The intricate geometry of a tree holds vital information about its health, volume, and ecological role. Traditional measurement is slow and error-prone, driving the need for advanced 3D digitization. By exploring this application, you will understand the entire workflow—from data acquisition with LiDAR and drones to sophisticated AI-driven reconstruction algorithms—and discover its transformative impact on managing our planet's green infrastructure.</p>
+                        </div>
+                    `
+                },
+                process: {
+                    title: 'The Reconstruction Workflow',
+                    content: `
+                        <div class="bg-white p-8 rounded-xl shadow-md">
+                             <h2 class="text-3xl font-bold text-gray-900 mb-2">The Reconstruction Workflow</h2>
+                            <p class="text-gray-600 mb-8">The journey from a real-world tree to a quantitative digital model involves several key stages. Each step uses specialized techniques to progressively refine the data and build an accurate representation. Click on a stage below to explore the methods and technologies involved.</p>
+                            
+                            <div id="process-flow" class="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 md:space-x-4 mb-8">
+                                <div class="process-step text-center cursor-pointer p-4 rounded-lg hover:bg-gray-200" data-step="1">
+                                    <div class="text-4xl mb-2">📡</div>
+                                    <h3 class="font-bold">1. Data Acquisition</h3>
+                                </div>
+                                <div class="text-2xl text-gray-400 font-mono hidden md:block">-></div>
+                                <div class="process-step text-center cursor-pointer p-4 rounded-lg hover:bg-gray-200" data-step="2">
+                                    <div class="text-4xl mb-2">🌿</div>
+                                    <h3 class="font-bold">2. Pre-processing</h3>
+                                </div>
+                                 <div class="text-2xl text-gray-400 font-mono hidden md:block">-></div>
+                                <div class="process-step text-center cursor-pointer p-4 rounded-lg hover:bg-gray-200" data-step="3">
+                                    <div class="text-4xl mb-2">🧩</div>
+                                    <h3 class="font-bold">3. Reconstruction</h3>
+                                </div>
+                                <div class="text-2xl text-gray-400 font-mono hidden md:block">-></div>
+                                <div class="process-step text-center cursor-pointer p-4 rounded-lg hover:bg-gray-200" data-step="4">
+                                    <div class="text-4xl mb-2">📈</div>
+                                    <h3 class="font-bold">4. Analysis & Application</h3>
+                                </div>
+                            </div>
+
+                            <div id="process-details" class="mt-6 p-6 bg-gray-50 rounded-lg border border-gray-200 min-h-[200px]">
+                                <!-- Details will be populated here -->
+                                <p class="text-gray-500">Select a stage to see the details.</p>
+                            </div>
+                        </div>
+                    `,
+                    details: {
+                        '1': {
+                            title: 'Stage 1: Data Acquisition',
+                            content: `
+                                <p class="mb-4">This is the foundational step where raw 3D data of trees is captured. The choice of method involves a trade-off between accuracy, cost, and efficiency.</p>
+                                <ul class="list-disc list-inside space-y-2">
+                                    <li><strong>Terrestrial Laser Scanning (TLS):</strong> Ground-based scanners provide the highest accuracy and detail but are expensive and cumbersome in dense forests.</li>
+                                    <li><strong>Mobile/Airborne Scanning (MLS/UAVs):</strong> More efficient for large areas, with UAV-based laser scanning (ULS) becoming a popular, viable alternative to TLS.</li>
+                                    <li><strong>Photogrammetry (SfM):</strong> A low-cost method using 2D images. It struggles with occlusions from dense foliage.</li>
+                                    <li><strong>Novel Image-based Methods (NeRF, 3D GS):</strong> AI-driven approaches like Neural Radiance Fields (NeRF) and 3D Gaussian Splatting (3D GS) offer better canopy reconstruction but can produce noisy or lower-resolution point clouds.</li>
+                                </ul>`
+                        },
+                        '2': {
+                            title: 'Stage 2: Pre-processing',
+                            content: `
+                                <p class="mb-4">Before reconstruction, the raw point cloud must be cleaned and segmented. This stage is critical for the accuracy of the final model, especially for quantitative analysis.</p>
+                                <ul class="list-disc list-inside space-y-2">
+                                    <li><strong>Noise Removal:</strong> Algorithms like Statistical Outlier Removal (SOR) and Moving Least Squares (MLS) are used to filter "ghost points" and other artifacts.</li>
+                                    <li><strong>Leaf-Wood Separation:</strong> This is a crucial and challenging step. Since many models (like QSMs) require only the woody structure, leaves must be separated from branches. Methods include:
+                                        <ul class="list-disc list-inside ml-6">
+                                            <li><strong>Geometric Features:</strong> Classifying points based on their local geometry (linearity, planarity).</li>
+                                            <li><strong>Deep Learning:</strong> Models like Random Forest (RF) show superior performance in classifying points as either leaf or wood.</li>
+                                            <li><strong>Manual Segmentation:</strong> A time-consuming but often necessary step using software like CloudCompare.</li>
+                                        </ul>
+                                    </li>
+                                </ul>`
+                        },
+                        '3': {
+                            title: 'Stage 3: Reconstruction',
+                            content: `
+                                <p class="mb-4">Here, the processed point cloud is transformed into a coherent 3D model. Different algorithms are suited for different purposes, from quantitative analysis to realistic visualization.</p>
+                                <ul class="list-disc list-inside space-y-2">
+                                    <li><strong>Quantitative Structure Models (QSMs):</strong> These methods, like TreeQSM, fit geometric primitives (usually cylinders) to the point cloud to represent the woody structure. They are excellent for extracting parameters like volume, DBH, and branch lengths.</li>
+                                    <li><strong>Deep Learning Approaches:</strong> Models like CNNs, GNNs, and Transformers can learn complex features from the point cloud to perform segmentation, completion, and even generate the structure.</li>
+                                    <li><strong>Skeletonization:</strong> A process to extract the central axis of branches. Deep learning methods like Smart-Tree are robust against noise in this task.</li>
+                                </ul>`
+                        },
+                        '4': {
+                            title: 'Stage 4: Analysis & Application',
+                            content: `
+                                <p class="mb-4">The final 3D model is not just a visual object; it's a source of valuable data used across multiple domains.</p>
+                                <ul class="list-disc list-inside space-y-2">
+                                    <li><strong>Parameter Extraction:</strong> Calculating key metrics like Above-Ground Biomass (AGB), Diameter at Breast Height (DBH), tree height, and canopy coverage.</li>
+                                    <li><strong>Simulation:</strong> Using the detailed geometry to simulate environmental factors, such as the cooling effect of trees in a city or future growth patterns.</li>
+                                    <li><strong>Visualization:</strong> Creating realistic models for use in virtual reality, urban planning mockups, or cultural heritage preservation.</li>
+                                </ul>`
+                        }
+                    }
+                },
+                comparison: {
+                    title: 'Comparative Analysis of Reconstruction Methods',
+                    content: `
+                        <div class="bg-white p-8 rounded-xl shadow-md">
+                            <h2 class="text-3xl font-bold text-gray-900 mb-2">Method Comparison Dashboard</h2>
+                            <p class="text-gray-600 mb-8">Choosing the right reconstruction algorithm is critical and depends on the specific goals of a project—whether it's high-precision volume estimation, rapid large-scale surveying, or realistic visualization. This dashboard allows you to compare different methods based on their performance and characteristics. Use the filters to narrow down the methods that fit your criteria.</p>
+                            
+                            <div class="mb-8">
+                                <h3 class="text-xl font-semibold mb-3">Filter by Strengths:</h3>
+                                <div id="filter-buttons" class="flex flex-wrap gap-2">
+                                    <button class="filter-btn bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-medium hover:bg-blue-200" data-filter="accuracy">High Accuracy</button>
+                                    <button class="filter-btn bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium hover:bg-green-200" data-filter="speed">Fast Processing</button>
+                                    <button class="filter-btn bg-purple-100 text-purple-800 px-4 py-2 rounded-full text-sm font-medium hover:bg-purple-200" data-filter="robustness">Robust to Noise</button>
+                                    <button class="filter-btn bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full text-sm font-medium hover:bg-yellow-200" data--filter="foliage">Handles Foliage</button>
+                                    <button id="reset-filters" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-full text-sm font-medium hover:bg-gray-300">Reset</button>
+                                </div>
+                            </div>
+
+                            <div id="comparison-content" class="space-y-10">
+                                <!-- Chart section -->
+                                <div>
+                                    <h3 class="text-xl font-semibold mb-4 text-center">Leaf-Filtering Algorithm Performance</h3>
+                                    <div class="chart-container">
+                                        <canvas id="comparisonChart"></canvas>
+                                    </div>
+                                    <p class="text-center text-sm text-gray-500 mt-2">Comparison of key leaf-filtering methods, crucial for preparing data for volume estimation. Data from comparative studies.</p>
+                                </div>
+                                <!-- Cards section -->
+                                <div>
+                                    <h3 class="text-xl font-semibold mb-4 text-center">Methodology Profiles</h3>
+                                    <div id="method-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        <!-- Method cards will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `,
+                    methods: [
+                        { name: 'Random Forest (RF)', category: 'Leaf-Filtering', tags: ['accuracy'], accuracy: 0.95, speed: 340, volume_r2: 0.96,
+                          summary: 'A machine learning model excelling at pointwise classification for leaf-wood separation.',
+                          strengths: 'Highest accuracy in classification and volume estimation. Resilient to tree size variations.',
+                          weaknesses: 'Slightly slower than the fastest methods.' },
+                        { name: 'LeWoS', category: 'Leaf-Filtering', tags: ['speed'], accuracy: 0.90, speed: 100, volume_r2: 0.75,
+                          summary: 'A geometry-based method for leaf-wood separation.',
+                          strengths: 'Most computationally efficient; fastest processing time.',
+                          weaknesses: 'Worst performance in volume estimation, tends to underestimate volume and miss small branches.' },
+                        { name: 'CANUPO', category: 'Leaf-Filtering', tags: [], accuracy: 0.89, speed: 150, volume_r2: 0.90,
+                          summary: 'A multi-scale dimensionality-based classifier.',
+                          strengths: 'Good efficiency and least sensitive to changes in point cloud density.',
+                          weaknesses: 'Significant deviation in volume estimation, lower classification accuracy.' },
+                        { name: 'TLSeparation', category: 'Leaf-Filtering', tags: ['accuracy'], accuracy: 0.81, speed: 724, volume_r2: 0.92,
+                          summary: 'A method based on geometric properties and point density.',
+                          strengths: 'Good volume alignment with destructive measurements.',
+                          weaknesses: 'Lowest pointwise accuracy and slowest processing time. Sensitive to parameter tuning.' },
+                        { name: 'TreeQSM', category: 'QSM', tags: ['accuracy'], 
+                          summary: 'A widely-used Quantitative Structure Model that fits cylinders to point clouds.',
+                          strengths: 'High precision for quantitative parameters (volume, DBH). Captures small branch details.',
+                          weaknesses: 'Requires leaf-off data for optimal performance; needs pre-segmentation.' },
+                        { name: 'NeRF', category: 'Deep Learning', tags: ['foliage'],
+                          summary: 'Neural Radiance Fields learn a continuous volumetric function from images.',
+                          strengths: 'Excellent for reconstructing canopies with dense foliage. Efficient for complex scenes.',
+                          weaknesses: 'Produces noisy, lower-resolution point clouds. Lower accuracy for structural parameters (e.g., DBH) than photogrammetry.' },
+                        { name: '3D Gaussian Splatting', category: 'Deep Learning', tags: ['foliage'], 
+                          summary: 'Represents a scene using multi-scale 3D Gaussians, optimized from images.',
+                          strengths: 'Produces smoother, more realistic models than NeRF. Good for branch structure and texture detail.',
+                          weaknesses: 'Can be computationally demanding without optimizations.' },
+                        { name: 'Smart-Tree', category: 'Skeletonization', tags: ['robustness'],
+                          summary: 'A deep learning method for extracting the central axis (skeleton) of branches.',
+                          strengths: 'Robust against both additive (Gaussian) and subtractive (Perlin) noise.',
+                          weaknesses: 'Requires labeled synthetic data for training; still being refined for real-world data gaps.' }
+                    ]
+                },
+                applications: {
+                    title: 'Real-World Applications',
+                    content: `
+                        <div class="bg-white p-8 rounded-xl shadow-md">
+                            <h2 class="text-3xl font-bold text-gray-900 mb-2">From Data to Decisions: The Impact of 3D Tree Models</h2>
+                            <p class="text-gray-600 mb-8">The ability to create accurate digital twins of trees has profound, practical implications across numerous fields. These models provide the quantitative data needed for evidence-based policymaking, sustainable resource management, and innovative urban design. Explore some of the key application areas below.</p>
+                            <div id="app-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            </div>
+                        </div>
+                    `,
+                    cards: [
+                        { icon: '🌳', title: 'Precision Forestry', 
+                          details: '<h3>Precision Forestry & Biomass Estimation</h3><p>3D models are pivotal for modern forest inventory. Quantitative Structure Models (QSMs) provide a non-destructive way to estimate Above-Ground Biomass (AGB), crucial for assessing carbon storage and supporting sustainable forest management. Methods combining Random Forest filtering with AdQSM have shown extremely high correlation (R²=0.96) with destructive measurements.</p>' },
+                        { icon: '🌡️', title: 'Environmental Monitoring',
+                          details: '<h3>Climate Change & Environmental Health</h3><p>Accurate AGB data directly supports global climate policies like the Paris Agreement. Furthermore, periodic 3D scans can diagnose tree health by detecting withered branches or forecasting changes due to environmental stress. Detailed models are even used in urban climatology to simulate the exact cooling effect of individual trees, helping us understand their microclimatic impact.</p>' },
+                        { icon: '🏙️', title: 'Urban Planning', 
+                          details: '<h3>Urban Planning & Smart Cities</h3><p>3D reconstruction is ushering in a "new era of urban planning." Planners can visualize future tree growth, design greener cities, and precisely model shade to create more comfortable public spaces and reduce urban heat islands. MIT’s Senseable City Lab has already used these models to plot shaded walking routes, a direct application for improving urban livability.</p>' },
+                        { icon: '🏯', title: 'Cultural Heritage',
+                          details: '<h3>Cultural Heritage Preservation</h3><p>In contexts like Japanese gardens, the exact shape of a tree is part of its cultural value. Accurate 3D models serve as a vital record for preserving these forms and can help restore historical gardens where original records are scarce.</p>' },
+                        { icon: '🤖', title: 'Agricultural Robotics', 
+                          details: '<h3>Agricultural Robotics</h3><p>Completed 3D models of individual trees are being used to guide agricultural robots for tasks like automated pruning, targeted spraying, or fruit yield estimation, improving efficiency and reducing labor costs in modern farming.</p>' },
+                        { icon: '🎮', title: 'Virtual Reality & Design',
+                          details: '<h3>VR, Gaming & Design Studies</h3><p>Realistic tree representations are essential for creating immersive digital landscapes in video games and virtual reality. The detailed models also serve as valuable analytical materials for academic studies in botany, forestry, and landscape design.</p>' }
+                    ]
+                },
+                challenges: {
+                    title: 'Challenges and Future Directions',
+                    content: `
+                        <div class="bg-white p-8 rounded-xl shadow-md">
+                            <h2 class="text-3xl font-bold text-gray-900 mb-2">Hurdles and Horizons</h2>
+                            <p class="text-gray-600 mb-8">Despite remarkable progress, 3D tree reconstruction faces significant challenges, from imperfect real-world data to the immense computational cost of advanced algorithms. However, the future is bright, with research pushing towards more robust, intelligent, and scalable solutions that will further expand the technology's impact.</p>
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                <div>
+                                    <h3 class="text-2xl font-semibold mb-4 text-center">Current Challenges</h3>
+                                    <div id="challenge-accordion" class="space-y-3">
+                                        <!-- Accordion items will be generated here -->
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 class="text-2xl font-semibold mb-4 text-center">Future Directions</h3>
+                                    <ul class="space-y-4">
+                                        <li class="flex items-start">
+                                            <span class="text-green-500 text-xl mr-3">▶</span>
+                                            <div><strong>Advanced Deep Learning:</strong> Integration of models like Transformers and Diffusion Models to better handle complex dependencies and generate more accurate reconstructions.</div>
+                                        </li>
+                                        <li class="flex items-start">
+                                            <span class="text-green-500 text-xl mr-3">▶</span>
+                                            <div><strong>Scalable Frameworks:</strong> Development of unified, end-to-end graph-based frameworks that streamline the entire process from segmentation to reconstruction, enabling large-scale operational use.</div>
+                                        </li>
+                                        <li class="flex items-start">
+                                            <span class="text-green-500 text-xl mr-3">▶</span>
+                                            <div><strong>Multi-modal Data Fusion:</strong> Combining LiDAR, camera imagery, and even textual data to create more robust and semantically rich models.</div>
+                                        </li>
+                                        <li class="flex items-start">
+                                            <span class="text-green-500 text-xl mr-3">▶</span>
+                                            <div><strong>Enhanced Robustness:</strong> Focusing on model generalization and resilience to real-world data imperfections (noise, gaps) through advanced data augmentation and training on diverse synthetic datasets.</div>
+                                        </li>
+                                        <li class="flex items-start">
+                                            <span class="text-green-500 text-xl mr-3">▶</span>
+                                            <div><strong>Real-time & Explainable AI:</strong> Developing lightweight models for real-time applications (e.g., autonomous systems) and making AI decisions more transparent and interpretable.</div>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    `,
+                    challengesList: [
+                        { title: 'Data Quality (Noise, Occlusions)', content: 'Raw point clouds are often incomplete or contain "ghost points" due to foliage blocking the view, reflective surfaces, or object movement. This requires robust filtering and completion algorithms.'},
+                        { title: 'Tree Morphology Complexity', content: 'The intricate, self-similar structure of trees, especially thin branches, dense foliage, and complex intersections, makes accurate modeling inherently difficult.'},
+                        { title: 'Algorithmic Generalizability', content: 'Many deep learning models are trained on specific datasets and perform poorly when applied to new, diverse real-world environments with different tree species or scanning conditions.'},
+                        { title: 'Computational Cost', content: 'Advanced reconstruction algorithms are computationally intensive, limiting their scalability for large-scale projects or use in real-time applications.'},
+                        { title: 'Data Annotation Bottleneck', content: 'Training deep learning models requires vast amounts of high-quality, manually annotated 3D data, which is expensive and time-consuming to produce.'}
+                    ]
+                }
+            };
+
+            function renderPage(page) {
+                const pageData = data[page];
+                if (!pageData) return;
+
+                document.title = pageData.title;
+                mainContent.innerHTML = `<div id="${page}" class="content-section active">${pageData.content}</div>`;
+                
+                navLinks.forEach(link => {
+                    link.classList.toggle('active', link.getAttribute('href') === `#${page}`);
+                });
+
+                // Post-render initializations
+                if (page === 'process') initProcessFlow();
+                if (page === 'comparison') initComparisonDashboard();
+                if (page === 'applications') initApplications();
+                if (page === 'challenges') initChallenges();
+            }
+            
+            function initProcessFlow() {
+                const steps = document.querySelectorAll('.process-step');
+                const detailsContainer = document.getElementById('process-details');
+                steps.forEach(step => {
+                    step.addEventListener('click', () => {
+                        const stepId = step.dataset.step;
+                        const detailData = data.process.details[stepId];
+                        detailsContainer.innerHTML = `
+                            <h4 class="text-xl font-bold mb-4">${detailData.title}</h4>
+                            ${detailData.content}
+                        `;
+                        steps.forEach(s => s.classList.remove('bg-gray-200'));
+                        step.classList.add('bg-gray-200');
+                    });
+                });
+            }
+
+            function initComparisonDashboard() {
+                const methods = data.comparison.methods;
+                const cardsContainer = document.getElementById('method-cards');
+                const filterButtons = document.querySelectorAll('.filter-btn');
+                const resetButton = document.getElementById('reset-filters');
+                
+                displayMethodCards(methods);
+                createComparisonChart(methods.filter(m => m.category === 'Leaf-Filtering'));
+
+                filterButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        button.classList.toggle('active-filter');
+                        button.classList.toggle('bg-blue-500');
+                        button.classList.toggle('text-white');
+                        applyFilters();
+                    });
+                });
+
+                resetButton.addEventListener('click', () => {
+                    filterButtons.forEach(button => {
+                        button.classList.remove('active-filter', 'bg-blue-500', 'text-white');
+                    });
+                    displayMethodCards(methods);
+                });
+            }
+
+            function applyFilters() {
+                const activeFilters = Array.from(document.querySelectorAll('.filter-btn.active-filter')).map(b => b.dataset.filter);
+                const allMethods = data.comparison.methods;
+                
+                if (activeFilters.length === 0) {
+                    displayMethodCards(allMethods);
+                    return;
+                }
+
+                const filteredMethods = allMethods.filter(method => {
+                    return activeFilters.every(filter => method.tags.includes(filter));
+                });
+
+                displayMethodCards(filteredMethods);
+            }
+
+            function displayMethodCards(methods) {
+                const cardsContainer = document.getElementById('method-cards');
+                if (!cardsContainer) return;
+                cardsContainer.innerHTML = '';
+                if (methods.length === 0) {
+                    cardsContainer.innerHTML = `<p class="text-gray-500 col-span-full text-center">No methods match the selected criteria.</p>`;
+                    return;
+                }
+                methods.forEach(method => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-gray-50 border border-gray-200 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow';
+                    card.innerHTML = `
+                        <h4 class="text-xl font-bold mb-2">${method.name}</h4>
+                        <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-indigo-600 bg-indigo-200 mb-3">${method.category}</span>
+                        <p class="text-sm text-gray-600 mb-3">${method.summary}</p>
+                        <div class="text-sm">
+                            <p class="mb-1"><strong class="text-green-600">Strengths:</strong> ${method.strengths}</p>
+                            <p><strong class="text-red-600">Weaknesses:</strong> ${method.weaknesses}</p>
+                        </div>
+                    `;
+                    cardsContainer.appendChild(card);
+                });
+            }
+            
+            function createComparisonChart(chartData) {
+                const ctx = document.getElementById('comparisonChart')?.getContext('2d');
+                if (!ctx) return;
+
+                if (chartInstance) {
+                    chartInstance.destroy();
+                }
+
+                const labels = chartData.map(d => d.name);
+
+                chartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Pointwise Accuracy',
+                                data: chartData.map(d => d.accuracy),
+                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1,
+                                yAxisID: 'y',
+                            },
+                            {
+                                label: 'Volume R²',
+                                data: chartData.map(d => d.volume_r2),
+                                backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderWidth: 1,
+                                yAxisID: 'y',
+                            },
+                             {
+                                label: 'Processing Time (s/1M points)',
+                                data: chartData.map(d => d.speed),
+                                backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                                borderColor: 'rgba(255, 99, 132, 1)',
+                                borderWidth: 1,
+                                yAxisID: 'y1',
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Accuracy / R² Value'
+                                },
+                                max: 1.0
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Processing Time (s)'
+                                },
+                                grid: {
+                                    drawOnChartArea: false, 
+                                },
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                            },
+                            legend: {
+                                position: 'top',
+                            }
+                        }
+                    }
+                });
+            }
+
+            function initApplications() {
+                const appCardsContainer = document.getElementById('app-cards');
+                if (!appCardsContainer) return;
+
+                data.applications.cards.forEach(card => {
+                    const cardEl = document.createElement('div');
+                    cardEl.className = 'bg-gray-50 p-6 rounded-lg shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer';
+                    cardEl.innerHTML = `
+                        <div class="text-4xl mb-3">${card.icon}</div>
+                        <h4 class="text-xl font-bold">${card.title}</h4>
+                    `;
+                    cardEl.addEventListener('click', () => openModal(card.details));
+                    appCardsContainer.appendChild(cardEl);
+                });
+            }
+            
+            function initChallenges() {
+                const accordionContainer = document.getElementById('challenge-accordion');
+                if (!accordionContainer) return;
+                
+                data.challenges.challengesList.forEach(challenge => {
+                    const item = document.createElement('div');
+                    item.className = 'border border-gray-200 rounded-lg overflow-hidden';
+                    item.innerHTML = `
+                        <div class="accordion-header p-4 font-semibold cursor-pointer bg-gray-50 hover:bg-gray-100 flex justify-between items-center">
+                            <span>${challenge.title}</span>
+                            <span class="transform transition-transform text-gray-500">+</span>
+                        </div>
+                        <div class="accordion-content p-4 bg-white text-gray-600" style="display: none;">
+                            ${challenge.content}
+                        </div>
+                    `;
+                    accordionContainer.appendChild(item);
+
+                    const header = item.querySelector('.accordion-header');
+                    const content = item.querySelector('.accordion-content');
+                    const icon = header.querySelector('span:last-child');
+
+                    header.addEventListener('click', () => {
+                        const isVisible = content.style.display === 'block';
+                        content.style.display = isVisible ? 'none' : 'block';
+                        icon.textContent = isVisible ? '+' : '-';
+                    });
+                });
+            }
+
+            function openModal(content) {
+                modalBody.innerHTML = content;
+                modalContainer.style.display = 'flex';
+            }
+
+            function closeModal() {
+                modalContainer.style.display = 'none';
+                modalBody.innerHTML = '';
+            }
+
+            modalCloseBtn.addEventListener('click', closeModal);
+            modalContainer.addEventListener('click', (e) => {
+                if (e.target === modalContainer) {
+                    closeModal();
+                }
+            });
+
+            // Initial setup
+            const initialPage = window.location.hash.substring(1) || 'overview';
+            renderPage(initialPage);
+
+            window.addEventListener('hashchange', () => {
+                const newPage = window.location.hash.substring(1) || 'overview';
+                renderPage(newPage);
+            });
+        });
+    </script>
+</body>
+</html>
